@@ -2,6 +2,15 @@ const curl = require("curl");
 const jsdom = require("jsdom");
 const mysql = require('mysql');
 
+const config = require('./config.json');
+
+const mysql_conn = mysql.createConnection({
+	host: config.host,
+	user: config.user,
+	password: config.password,
+	port: config.port
+});
+
 function getTitlesAndPrices(body){
 	const {JSDOM} = jsdom;
 	const dom = new JSDOM(body);
@@ -22,18 +31,24 @@ function getTitlesAndPrices(body){
 
 function sendToDB(body){
 	getTitlesAndPrices(body);
+
+	mysql_conn.connect(function(err) {
+	  if (err) throw err;
+	  console.log("Connected from the const!");
+	});
+
+	//mysql_conn.end();
 }
 
-
+//the book info original source
 const url = "https://newyork.craigslist.org/search/bka";
-curl.get(url, null, (err,resp,body)=>{
-  if(resp.statusCode == 200){
-     sendToDB(body);
-  }
-  else{
-     //some error handling
-     console.log("error while fetching url");
-  }
+curl.get(url, null, (err,resp,body) => {
+	if(resp.statusCode == 200){
+		sendToDB(body);
+	}else{
+		//some error handling
+		console.log("error while fetching url");
+	}
 });
 
 exports.handler = async (event) => {

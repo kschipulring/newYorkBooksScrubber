@@ -19,25 +19,52 @@ function getTitlesAndPrices(body){
 	//get each products information DOM parent
 	var products = $(".result-row p.result-info");
 	
+	var inserterVals = [];
+	
 	for( var i=0; i<products.length; i++ ){
-		var title = $(products[i]).children('a.result-title');
+		var title = $(products[i]).children('a.result-title').text().replace(/'/g, "\\'");
 		
-		var price = $(products[i]).children('.result-meta').children('.result-price');
+		var price = $(products[i]).children('.result-meta').children('.result-price').text().replace(/\$/, "");
 		
-		console.log( "title = " + title.text() );
-		console.log( "price = " + price.text().replace(/\$/, "") );
+		price = parseFloat( price );
+		
+		if( isNaN(price) ){
+			price = 0;
+		}
+		
+		inserterVals.push( [ title, price] );
 	}
+	
+	return inserterVals;
 }
 
 function sendToDB(body){
-	getTitlesAndPrices(body);
+	var inserterVals = getTitlesAndPrices(body);
 
 	mysql_conn.connect(function(err) {
-	  if (err) throw err;
-	  console.log("Connected from the const!");
+		if (err) throw err;
+		console.log("Connected from the const!");
+	});
+	
+	var sql = "INSERT INTO bookreader.newyork_books (title, price) VALUES ?";
+
+	
+	var values = inserterVals;
+	
+	console.log( values );
+	
+	/*
+	con.query(sql, function (err, result) {
+		if (err) throw err;
+		console.log("selected");
+	});*/
+	
+	mysql_conn.query(sql, [values], function (err, result) {
+		if (err) throw err;
+		console.log("Number of records inserted: " + result.affectedRows);
 	});
 
-	//mysql_conn.end();
+	mysql_conn.end();
 }
 
 //the book info original source

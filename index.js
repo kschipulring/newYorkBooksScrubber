@@ -22,9 +22,9 @@ function getTitlesAndPrices(body){
 	var inserterVals = [];
 	
 	for( var i=0; i<products.length; i++ ){
-		var title = $(products[i]).children('a.result-title').text().replace(/'/g, "\\'");
+		let title = $(products[i]).children('a.result-title').text().replace(/'/g, "\\'");
 		
-		var price = $(products[i]).children('.result-meta').children('.result-price').text().replace(/\$/, "");
+		let price = $(products[i]).children('.result-meta').children('.result-price').text().replace(/\$/, "");
 		
 		price = parseFloat( price );
 		
@@ -32,7 +32,11 @@ function getTitlesAndPrices(body){
 			price = 0;
 		}
 		
-		inserterVals.push( [ title, price] );
+		let url = $(products[i]).children('a.result-title').attr("href");
+		
+		let ts = Math.round((new Date()).getTime() / 1000);
+		
+		inserterVals.push( [ title, price, url, ts] );
 	}
 	
 	return inserterVals;
@@ -46,7 +50,7 @@ function sendToDB(body){
 		console.log("Connected from the const!");
 	});
 	
-	var sql = "INSERT INTO bookreader.newyork_books (title, price) VALUES ?";
+	var sql = "INSERT INTO bookreader.newyork_books (title, price, url, time_insert, orig_page) VALUES ?";
 
 	
 	var values = inserterVals;
@@ -68,15 +72,37 @@ function sendToDB(body){
 }
 
 //the book info original source
-const url = "https://newyork.craigslist.org/search/bka";
-curl.get(url, null, (err,resp,body) => {
-	if(resp.statusCode == 200){
-		sendToDB(body);
-	}else{
-		//some error handling
-		console.log("error while fetching url");
-	}
-});
+const base_url = "https://newyork.craigslist.org/search/bka";
+
+function getCurledPage(url, suffix = null){
+	curl.get(url, null, (err,resp,body) => {
+		if(resp.statusCode == 200){
+			sendToDB(body);
+		}else{
+			//some error handling
+			console.log("error while fetching url");
+		}
+	});
+}
+
+//https://newyork.craigslist.org/search/bka?s=240
+
+var suffixArr = [];
+
+
+for(var i=0; i<1000; i+=120){
+    console.log(i);
+	
+	let suffix = (i === 0)? "" : "?s=" + i;
+	
+	//getCurledPage( base_url + suffix );
+	
+	suffixArr.push( suffix );
+}
+
+
+getCurledPage( "https://newyork.craigslist.org/search/bka" );
+
 
 exports.handler = async (event) => {
 	// TODO implement

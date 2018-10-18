@@ -17,7 +17,10 @@ const cl_results_pp = 120;
 const final_page_start = parseInt(max_results / cl_results_pp) * cl_results_pp;
 
 
-//should only be run once per AWS Lambda call for this Lambda function.
+/*
+should only be run once per AWS Lambda call for this Lambda function.
+Used in all scenarios, whether DB insertions or search operations.
+*/
 const mysql_conn = mysql.createConnection({
 	host: config.host,
 	user: config.user,
@@ -38,13 +41,27 @@ function getDataFromCurlHtml(body, suffix){
 	
 	var inserterVals = [];
 	
-	for( var i=0; i<products.length; i++ ){
+	/*
+	We never want total products for this session to be greater than const 'max_results'.
+	So, if the suffix has the same value or greater than 'final_page_start', the maximum
+	number of iterations in this loop will be 'final_page_start' from 'max_results', unless
+	products.length here happens to be smaller than that for some reason
+	*/
+	if( suffix >= final_page_start ){
+		var loop_max = Math.min( (max_results - final_page_start), products.length );
+	}else{
+		var loop_max = products.length;
+	}
+	
+	//loop through the products from the craigslist page
+	for( var i=0; i<loop_max; i++ ){
 		let title = $(products[i]).children('a.result-title').text().replace(/'/g, "\\'");
 		
 		let price = $(products[i]).children('.result-meta').children('.result-price').text().replace(/\$/, "");
 		
 		price = parseFloat( price );
 		
+		//sometimes, for some reason, there is no price included
 		if( isNaN(price) ){
 			price = 0;
 		}
@@ -53,9 +70,11 @@ function getDataFromCurlHtml(body, suffix){
 		
 		let ts = Math.round((new Date()).getTime() / max_results);
 		
+		//this row now prepared to be inserted
 		inserterVals.push( [ title, price, url, ts, suffix] );
 	}
 	
+	//returning mysql friendly inserter rows
 	return inserterVals;
 }
 
@@ -70,19 +89,19 @@ function sendToDB(body, suffix=null){
 		});
 	}
 
-	//self evident, insert statement, using prepared statement technique.
+	/*
+	self evident, insert statement, using prepared statement technique.
+	Also using 'IGNORE' keyword to gently deal with overwrites, READ: without error complaints.
+	*/
 	var sql = "INSERT IGNORE INTO bookreader.newyork_books (title, price, url, time_insert, orig_page) VALUES ?";
 
-	
-	var values = inserterVals;
-
-	
-	mysql_conn.query(sql, [values], function (err, result) {
+	//where the insertion magic occurs
+	mysql_conn.query(sql, [inserterVals], function (err, result) {
 		if (err) throw err;
 		console.log("Number of records inserted: " + result.affectedRows);
 	});
 
-	//disconnnect from the DB if this is the last time.
+	//disconnnect from the DB if this is the last time / last page curl grab.
 	if( suffix === final_page_start ){	
 		mysql_conn.end();
 	}

@@ -6,12 +6,17 @@ function getTitlesAndPrices(body){
 	const dom = new JSDOM(body);
 	const $ = (require('jquery'))(dom.window);
 	
-	//get the titles just for now
-	var titles = $("p.result-info a.result-title");
+	//get each products information DOM parent
+	var products = $(".result-row p.result-info");
 	
-	console.log( titles[0].text );
-	
-	
+	for( var i=0; i<products.length; i++ ){
+		var title = $(products[i]).children('a.result-title');
+		
+		var price = $(products[i]).children('.result-meta').children('.result-price');
+		
+		console.log( "title = " + title.text() );
+		console.log( "price = " + price.text().replace(/\$/, "") );
+	}
 }
 
 function sendToDB(body){

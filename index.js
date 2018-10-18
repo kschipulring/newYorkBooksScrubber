@@ -1,5 +1,6 @@
 const curl = require("curl");
 const jsdom = require("jsdom");
+const mysql = require('mysql');
 
 function getTitlesAndPrices(body){
 	const {JSDOM} = jsdom;

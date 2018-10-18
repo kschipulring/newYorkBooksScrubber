@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "for scanning books on craigslist",
   "main": "index.js",
-  "dependencies": {},
+  "dependencies": {
+    "mysql": "^2.16.0"
+  },
   "devDependencies": {
     "curl": "^0.1.4",
     "jquery": "^3.3.1",

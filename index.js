@@ -11,13 +11,15 @@ const mysql_conn = mysql.createConnection({
 	port: config.port
 });
 
-function getTitlesAndPrices(body){
+function getTitlesAndPrices(body, suffix){
 	const {JSDOM} = jsdom;
 	const dom = new JSDOM(body);
 	const $ = (require('jquery'))(dom.window);
 	
 	//get each products information DOM parent
 	var products = $(".result-row p.result-info");
+	
+	var suffix = ( suffix !== null )? suffix : 0;
 	
 	var inserterVals = [];
 	
@@ -36,48 +38,64 @@ function getTitlesAndPrices(body){
 		
 		let ts = Math.round((new Date()).getTime() / 1000);
 		
-		inserterVals.push( [ title, price, url, ts] );
+		inserterVals.push( [ title, price, url, ts, suffix] );
 	}
 	
 	return inserterVals;
 }
 
-function sendToDB(body){
-	var inserterVals = getTitlesAndPrices(body);
+function sendToDB(body, suffix=null){
+	var inserterVals = getTitlesAndPrices(body, suffix);
 
-	mysql_conn.connect(function(err) {
-		if (err) throw err;
-		console.log("Connected from the const!");
-	});
+	if(suffix === null){
+		mysql_conn.connect(function(err) {
+			if (err) throw err;
+			console.log("Connected from the const!");
+		});
+	}
+
 	
-	var sql = "INSERT INTO bookreader.newyork_books (title, price, url, time_insert, orig_page) VALUES ?";
+	var sql = "INSERT IGNORE INTO bookreader.newyork_books (title, price, url, time_insert, orig_page) VALUES ?";
 
 	
 	var values = inserterVals;
 	
 	console.log( values );
 	
-	/*
-	con.query(sql, function (err, result) {
-		if (err) throw err;
-		console.log("selected");
-	});*/
-	
 	mysql_conn.query(sql, [values], function (err, result) {
 		if (err) throw err;
 		console.log("Number of records inserted: " + result.affectedRows);
 	});
 
-	mysql_conn.end();
+	if( suffix === 960 ){
+		
+		mysql_conn.end();
+	}
 }
 
 //the book info original source
 const base_url = "https://newyork.craigslist.org/search/bka";
 
-function getCurledPage(url, suffix = null){
-	curl.get(url, null, (err,resp,body) => {
+function getCurledPage(suffix = null){
+	var get_url = base_url;
+	
+	get_url += ( suffix !== null )? "?s=" + suffix : "";
+	
+	console.log( get_url );
+	
+	curl.get(get_url, null, (err,resp,body) => {
 		if(resp.statusCode == 200){
-			sendToDB(body);
+			sendToDB(body, suffix);
+			
+			if(suffix === null || suffix < 960){
+				if( suffix === null ){
+					suffix = 120;
+				}else{
+					suffix += 120;
+				}
+				
+				getCurledPage(suffix);
+			}
 		}else{
 			//some error handling
 			console.log("error while fetching url");
@@ -87,7 +105,8 @@ function getCurledPage(url, suffix = null){
 
 //https://newyork.craigslist.org/search/bka?s=240
 
-var suffixArr = [];
+/*
+const suffixArr = [];
 
 
 for(var i=0; i<1000; i+=120){
@@ -99,9 +118,10 @@ for(var i=0; i<1000; i+=120){
 	
 	suffixArr.push( suffix );
 }
+*/
 
 
-getCurledPage( "https://newyork.craigslist.org/search/bka" );
+getCurledPage();
 
 
 exports.handler = async (event) => {

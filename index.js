@@ -4,6 +4,20 @@ const mysql = require('mysql');
 
 const config = require('./config.json');
 
+//the book info original source. may have something like '?s=240' at the end, the s variable is always multiple of 120
+const base_url = "https://newyork.craigslist.org/search/bka";
+
+//hard constants. first is how many maximum we ever want from a session.
+const max_results = 1000;
+
+//second is how many results that craigslist displays per its own pages (max, can be less if the total is too small)
+const cl_results_pp = 120;
+
+//the number that the final page will start at.  Will be 960 if above values are 1000 and 120
+const final_page_start = parseInt(max_results / cl_results_pp) * cl_results_pp;
+
+
+//should only be run once per AWS Lambda call for this Lambda function.
 const mysql_conn = mysql.createConnection({
 	host: config.host,
 	user: config.user,
@@ -11,7 +25,8 @@ const mysql_conn = mysql.createConnection({
 	port: config.port
 });
 
-function getTitlesAndPrices(body, suffix){
+//accepts html content as first argument.
+function getDataFromCurlHtml(body, suffix){
 	const {JSDOM} = jsdom;
 	const dom = new JSDOM(body);
 	const $ = (require('jquery'))(dom.window);
@@ -36,7 +51,7 @@ function getTitlesAndPrices(body, suffix){
 		
 		let url = $(products[i]).children('a.result-title').attr("href");
 		
-		let ts = Math.round((new Date()).getTime() / 1000);
+		let ts = Math.round((new Date()).getTime() / max_results);
 		
 		inserterVals.push( [ title, price, url, ts, suffix] );
 	}
@@ -45,8 +60,9 @@ function getTitlesAndPrices(body, suffix){
 }
 
 function sendToDB(body, suffix=null){
-	var inserterVals = getTitlesAndPrices(body, suffix);
+	var inserterVals = getDataFromCurlHtml(body, suffix);
 
+	//only connect to the DB for the first time
 	if(suffix === null){
 		mysql_conn.connect(function(err) {
 			if (err) throw err;
@@ -54,44 +70,38 @@ function sendToDB(body, suffix=null){
 		});
 	}
 
-	
+	//self evident, insert statement, using prepared statement technique.
 	var sql = "INSERT IGNORE INTO bookreader.newyork_books (title, price, url, time_insert, orig_page) VALUES ?";
 
 	
 	var values = inserterVals;
-	
-	console.log( values );
+
 	
 	mysql_conn.query(sql, [values], function (err, result) {
 		if (err) throw err;
 		console.log("Number of records inserted: " + result.affectedRows);
 	});
 
-	if( suffix === 960 ){
-		
+	//disconnnect from the DB if this is the last time.
+	if( suffix === final_page_start ){	
 		mysql_conn.end();
 	}
 }
-
-//the book info original source
-const base_url = "https://newyork.craigslist.org/search/bka";
 
 function getCurledPage(suffix = null){
 	var get_url = base_url;
 	
 	get_url += ( suffix !== null )? "?s=" + suffix : "";
 	
-	console.log( get_url );
-	
 	curl.get(get_url, null, (err,resp,body) => {
 		if(resp.statusCode == 200){
 			sendToDB(body, suffix);
 			
-			if(suffix === null || suffix < 960){
+			if(suffix === null || suffix < final_page_start){
 				if( suffix === null ){
-					suffix = 120;
+					suffix = cl_results_pp;
 				}else{
-					suffix += 120;
+					suffix += cl_results_pp;
 				}
 				
 				getCurledPage(suffix);
@@ -103,24 +113,8 @@ function getCurledPage(suffix = null){
 	});
 }
 
-//https://newyork.craigslist.org/search/bka?s=240
 
-/*
-const suffixArr = [];
-
-
-for(var i=0; i<1000; i+=120){
-    console.log(i);
-	
-	let suffix = (i === 0)? "" : "?s=" + i;
-	
-	//getCurledPage( base_url + suffix );
-	
-	suffixArr.push( suffix );
-}
-*/
-
-
+//start the magic for curl to insertions
 getCurledPage();
 
 
